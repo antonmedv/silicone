@@ -17,6 +17,8 @@ use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 
 class Application extends Silex
 {
+
+
     /**
      * Creates and returns a form builder instance
      *
