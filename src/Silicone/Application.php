@@ -82,7 +82,10 @@ abstract class Application extends Silex\Application
             $app->getRootDir() . '/views/',
         );
 
-        $app['security.user_entity_class'] = 'Silicone\Users\Entity\User';
+        $app['security.user_class'] = 'Silicone\Users\Entity\User';
+        $app['security.users'] = $app->share(function () use ($app) {
+            return new UserProvider($app['em']->getRepository($app['security.user_class']));
+        });
         $app['security.firewalls'] = array(
             'default' => array(
                 'pattern' => '^/',
@@ -94,9 +97,7 @@ abstract class Application extends Silex\Application
                 'logout' => array(
                     'logout_path' => '/logout'
                 ),
-                'users' => $app->share(function () use ($app) {
-                    return new UserProvider($app['em']->getRepository($app['security.user_entity_class']));
-                }),
+                'users' => $app->raw('security.users'),
                 'remember_me' => array(
                     'key' => 'remember_me',
                     'lifetime' => 31536000, # 365 days in seconds
