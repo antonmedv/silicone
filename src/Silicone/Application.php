@@ -6,8 +6,10 @@
  */
 namespace Silicone;
 
-use Monolog\Logger;
 use Silex;
+use Silicone;
+use Monolog\Logger;
+use Silicone\Users\UserProvider;
 use Symfony\Component\Form\Form;
 use Symfony\Component\Form\FormBuilder;
 use Symfony\Component\Form\FormTypeInterface;
@@ -18,32 +20,33 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 
-class Application extends Silex\Application
+abstract class Application extends Silex\Application
 {
-    public function configure()
+    public function __construct(array $values = array())
+    {
+        parent::__construct($values);
+
+        $this->init();
+        $this->configure();
+        $this->registerProviders();
+    }
+
+    /**
+     * You must define this method and configure application.
+     */
+    abstract protected function configure();
+
+    /**
+     * Initialize application with default parameters.
+     */
+    private function init()
     {
         $app = $this;
 
-        $app['version'] = '6.0.0 BETA1';
+        $app['debug'] = true;
+        $app['locale'] = 'en';
 
-        $app['config_file'] = $this->getOpenDir() . '/config.php';
-
-        $config = new Config();
-        $reader = new Reader($config);
-        $reader->read($app['config_file']);
-
-        $app['config'] = function () use ($config) {
-            return $config;
-        };
-
-        $app['debug'] = $config->debug;
-        $app['locale'] = $config->locale;
-
-        $app['router.resource'] = array(
-            $app->getRootDir() . '/src/Users/Controller/',
-            $app->getRootDir() . '/src/Chat/Controller/',
-            $app->getRootDir() . '/src/Admin/Controller/',
-        );
+        $app['router.resource'] = array();
         $app['router.cache_dir'] = $app->getCacheDir();
 
         $app['assets.base_path'] = '/web/';
@@ -53,118 +56,108 @@ class Application extends Silex\Application
             'proxy_namespace' => 'Proxy',
             'proxy_dir' => $app->getCacheDir() . '/proxy/',
         );
-
-        switch ($config->database) {
-            case 'mysql':
-                $app['doctrine.connection'] = $config->mysql;
-                break;
-
-            case 'sqlite':
-                $app['doctrine.connection'] = $config->sqlite;
-                break;
-
-            case 'postgres':
-                $app['doctrine.connection'] = $config->postgres;
-                break;
-        }
-
-        $app['doctrine.paths'] = array(
-            $app->getRootDir() . '/src/Users/Entity',
-            $app->getRootDir() . '/src/Chat/Entity',
+        $app['doctrine.connection'] = array(
+            'driver' => 'pdo_sqlite',
+            'user' => '',
+            'password' => '',
+            'path' => $app->getOpenDir() . '/database.db',
         );
+        $app['doctrine.paths'] = array();
 
         $app['monolog.logfile'] = $app->getLogDir() . '/log.txt';
 
         $app['translator.resource'] = $app->getRootDir() . '/lang/';
-    }
 
-    public function bootstrap()
-    {
-        $this->configure();
+        $app['http_cache.cache_dir'] = $app->getCacheDir() . '/http/';
 
-        $app = $this;
-        $app->register(new Silex\Provider\HttpCacheServiceProvider(), array(
-            'http_cache.cache_dir' => $app->getCacheDir() . '/http/',
-        ));
+        $app['session.storage.options'] = array(
+            'name' => 'Silicone',
+        );
 
-        $app['resolver'] = $app->share(function () use ($app) {
-            return new Common\Controller\ControllerResolver($app, $app['logger']);
-        });
+        $app['twig.options'] = array(
+            'cache' => $app->getCacheDir() . '/twig/',
+            'auto_reload' => true,
+        );
+        $app['twig.path'] = array(
+            $app->getRootDir() . '/views/',
+        );
 
-        $app->register(new Common\Provider\DoctrineCommonServiceProvider());
-
-        $app->register(new Common\Provider\DoctrineServiceProvider());
-        $app['console'] = $app->protect(function (\Symfony\Component\Console\Application $console) use ($app) {
-            $console->add(new Common\Doctrine\Console\DatabaseCreateCommand($app));
-            $console->add(new Common\Doctrine\Console\DatabaseDropCommand($app));
-            $console->add(new Common\Doctrine\Console\SchemaCreateCommand($app));
-            $console->add(new Common\Doctrine\Console\SchemaDropCommand($app));
-            $console->add(new Common\Doctrine\Console\SchemaUpdateCommand($app));
-            $console->add(new \Silicone\Console\CacheClearCommand($app));
-        });
-
-        $app->register(new Silex\Provider\MonologServiceProvider());
-
-        $app->register(new Silex\Provider\SessionServiceProvider(), array(
-            'session.storage.options' => array(
-                'name' => 'ELFCHAT',
-            ),
-        ));
-
-        $app->register(new Silex\Provider\TwigServiceProvider(), array(
-            'twig.options' => array(
-                'cache' => $app->getCacheDir() . '/twig/',
-                'auto_reload' => true,
-            ),
-            'twig.path' => array(
-                $app->getRootDir() . '/views/',
-            ),
-        ));
-        $app->register(new Common\Provider\TwigServiceProviderExtension());
-
-        $app->register(new Common\Provider\TranslationServiceProvider());
-
-        $app->register(new Silex\Provider\ValidatorServiceProvider());
-        $app->register(new Common\Provider\ValidatorServiceProviderExtension());
-
-        $app->register(new Silex\Provider\FormServiceProvider());
-
-        $app->register(new Silex\Provider\SecurityServiceProvider(), array(
-            'security.firewalls' => array(
-                'default' => array(
-                    'pattern' => '^/',
-                    'anonymous' => true,
-                    'form' => array(
-                        'login_path' => '/login',
-                        'check_path' => '/login_check'
-                    ),
-                    'logout' => array(
-                        'logout_path' => '/logout'
-                    ),
-                    'users' => $app->share(function () use ($app) {
-                        return new UserProvider($app->getEntityManager()->getRepository('Users\Entity\User'));
-                    }),
-                    'remember_me' => array(
-                        'key' => 'remember_me',
-                        'lifetime' => 31536000, # 365 days in seconds
-                        'path' => '/',
-                        'name' => 'ELFCHAT_REMEMBER_ME',
-                    ),
+        $app['security.user_entity_class'] = 'Silicone\Users\Entity\User';
+        $app['security.firewalls'] = array(
+            'default' => array(
+                'pattern' => '^/',
+                'anonymous' => true,
+                'form' => array(
+                    'login_path' => '/login',
+                    'check_path' => '/login_check'
+                ),
+                'logout' => array(
+                    'logout_path' => '/logout'
+                ),
+                'users' => $app->share(function () use ($app) {
+                    return new UserProvider($app['em']->getRepository($app['security.user_entity_class']));
+                }),
+                'remember_me' => array(
+                    'key' => 'remember_me',
+                    'lifetime' => 31536000, # 365 days in seconds
+                    'path' => '/',
+                    'name' => 'REMEMBER_ME',
                 ),
             ),
-            'security.role_hierarchy' => array(
-                'ROLE_MODERATOR' => array('ROLE_USER'),
-                'ROLE_ADMIN' => array('ROLE_USER', 'ROME_MODERATOR'),
-            ),
-            'security.access_rules' => array(
-                array('^/admin', 'ROLE_ADMIN'),
-                array('^/', 'IS_AUTHENTICATED_ANONYMOUSLY'),
-            )
+        );
+        $app['security.role_hierarchy'] = array(
+            'ROLE_USER' => array('ROLE_GUEST'),
+            'ROLE_ADMIN' => array('ROLE_USER'),
+        );
+        $app['security.access_rules'] = array(
+            array('^/', 'IS_AUTHENTICATED_ANONYMOUSLY'),
+        );
+    }
+
+    /**
+     * Register necessary providers.
+     */
+    protected function registerProviders()
+    {
+        $app = $this;
+
+        $app->register(new Silex\Provider\HttpCacheServiceProvider(), array(
+            'http_cache.cache_dir' => $app['http_cache.cache_dir'],
+        ));
+        $app['resolver'] = $app->share(function () use ($app) {
+            return new Silicone\Controller\ControllerResolver($app, $app['logger']);
+        });
+        $app->register(new Silicone\Provider\DoctrineCommonServiceProvider());
+        $app->register(new Silicone\Provider\DoctrineOrmServiceProvider());
+        $app->register(new Silex\Provider\MonologServiceProvider());
+        $app->register(new Silex\Provider\SessionServiceProvider(), array(
+            'session.storage.options' => $app['session.storage.options']
+        ));
+        $app->register(new Silex\Provider\TwigServiceProvider(), array(
+            'twig.options' => $app['twig.options'],
+            'twig.path' => $app['twig.path'],
+        ));
+        $app->register(new Silicone\Provider\TwigServiceProviderExtension());
+        $app->register(new Silicone\Provider\TranslationServiceProvider());
+        $app->register(new Silex\Provider\ValidatorServiceProvider());
+        $app->register(new Silicone\Provider\ValidatorServiceProviderExtension());
+        $app->register(new Silex\Provider\FormServiceProvider());
+        $app->register(new Silex\Provider\SecurityServiceProvider(), array(
+            'security.firewalls' => $app['security.firewalls'],
+            'security.role_hierarchy' => $app['security.role_hierarchy'],
+            'security.access_rules' => $app['security.access_rules']
         ));
         $app->register(new Silex\Provider\RememberMeServiceProvider());
-        $app->register(new Common\Provider\SecurityServiceProviderExtension());
-
-        $app->register(new Common\Provider\RouterServiceProvider());
+        $app->register(new Silicone\Provider\SecurityServiceProviderExtension());
+        $app->register(new Silicone\Provider\RouterServiceProvider());
+        $app['console'] = $app->protect(function (\Symfony\Component\Console\Application $console) use ($app) {
+            $console->add(new Silicone\Doctrine\Console\DatabaseCreateCommand($app));
+            $console->add(new Silicone\Doctrine\Console\DatabaseDropCommand($app));
+            $console->add(new Silicone\Doctrine\Console\SchemaCreateCommand($app));
+            $console->add(new Silicone\Doctrine\Console\SchemaDropCommand($app));
+            $console->add(new Silicone\Doctrine\Console\SchemaUpdateCommand($app));
+            $console->add(new Silicone\Console\CacheClearCommand($app));
+        });
     }
 
     /**
@@ -191,7 +184,7 @@ class Application extends Silex\Application
         static $dir;
         if (empty($dir)) {
             $rc = new \ReflectionClass(get_class($this));
-            $dir =  $rc->getFileName();
+            $dir = $rc->getFileName();
         }
         return $dir;
     }
@@ -279,8 +272,8 @@ class Application extends Silex\Application
      * Creates and returns a Form instance from the type of the form.
      *
      * @param string|FormTypeInterface $type    The built type of the form
-     * @param mixed                    $data    The initial data for the form
-     * @param array                    $options Options for the form
+     * @param mixed $data    The initial data for the form
+     * @param array $options Options for the form
      *
      * @return Form
      */
@@ -292,8 +285,8 @@ class Application extends Silex\Application
     /**
      * Adds a log record.
      *
-     * @param string  $message The log message
-     * @param array   $context The log context
+     * @param string $message The log message
+     * @param array $context The log context
      * @param integer $level   The logging level
      *
      * @return Boolean Whether the record has been processed
@@ -327,7 +320,7 @@ class Application extends Silex\Application
      * Encodes the raw password.
      *
      * @param UserInterface $user     A UserInterface instance
-     * @param string        $password The password to encode
+     * @param string $password The password to encode
      *
      * @return string The encoded password
      *
@@ -352,7 +345,7 @@ class Application extends Silex\Application
      * Translates the given message.
      *
      * @param string $id         The message id
-     * @param array  $parameters An array of parameters for the message
+     * @param array $parameters An array of parameters for the message
      * @param string $domain     The domain for the message
      * @param string $locale     The locale
      *
@@ -366,11 +359,11 @@ class Application extends Silex\Application
     /**
      * Translates the given choice message by choosing a translation according to a number.
      *
-     * @param string  $id         The message id
+     * @param string $id         The message id
      * @param integer $number     The number to use to find the indice of the message
-     * @param array   $parameters An array of parameters for the message
-     * @param string  $domain     The domain for the message
-     * @param string  $locale     The locale
+     * @param array $parameters An array of parameters for the message
+     * @param string $domain     The domain for the message
+     * @param string $locale     The locale
      *
      * @return string The translated string
      */
@@ -384,8 +377,8 @@ class Application extends Silex\Application
      *
      * To stream a view, pass an instance of StreamedResponse as a third argument.
      *
-     * @param string   $view       The view name
-     * @param array    $parameters An array of parameters to pass to the view
+     * @param string $view       The view name
+     * @param array $parameters An array of parameters to pass to the view
      * @param Response $response   A Response instance
      *
      * @return Response A Response instance
@@ -413,7 +406,7 @@ class Application extends Silex\Application
      * Renders a view.
      *
      * @param string $view       The view name
-     * @param array  $parameters An array of parameters to pass to the view
+     * @param array $parameters An array of parameters to pass to the view
      *
      * @return Response A Response instance
      */
@@ -426,7 +419,7 @@ class Application extends Silex\Application
      * Generates a path from the given parameters.
      *
      * @param string $route      The name of the route
-     * @param mixed  $parameters An array of parameters
+     * @param mixed $parameters An array of parameters
      *
      * @return string The generated path
      */
@@ -439,7 +432,7 @@ class Application extends Silex\Application
      * Generates an absolute URL from the given parameters.
      *
      * @param string $route      The name of the route
-     * @param mixed  $parameters An array of parameters
+     * @param mixed $parameters An array of parameters
      *
      * @return string The generated URL
      */
