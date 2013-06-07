@@ -5,8 +5,17 @@
  * file that was distributed with this source code.
  */
 
+use Monolog\Logger;
+use Silex\Application as Silex;
+use Symfony\Component\Form\Form;
+use Symfony\Component\Form\FormBuilder;
+use Symfony\Component\Form\FormTypeInterface;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 
-class Application 
+class Application extends Silex
 {
     /**
      * Creates and returns a form builder instance
