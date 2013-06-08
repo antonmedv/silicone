@@ -243,7 +243,7 @@ abstract class Application extends Silex\Application
      */
     public function isGranted($role)
     {
-        return $this['security']->isGranted('ROLE_ADMIN');
+        return $this['security']->isGranted($role);
     }
 
     /**
