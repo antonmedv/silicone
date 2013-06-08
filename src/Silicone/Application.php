@@ -185,7 +185,7 @@ abstract class Application extends Silex\Application
         static $dir;
         if (empty($dir)) {
             $rc = new \ReflectionClass(get_class($this));
-            $dir = $rc->getFileName();
+            $dir = dirname(dirname($rc->getFileName()));
         }
         return $dir;
     }
