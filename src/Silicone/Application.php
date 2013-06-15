@@ -128,6 +128,7 @@ abstract class Application extends Silex\Application
         $app->register(new Silex\Provider\HttpCacheServiceProvider(), array(
             'http_cache.cache_dir' => $app['http_cache.cache_dir'],
         ));
+        $app->register(new Silex\Provider\ServiceControllerServiceProvider());
         $app['resolver'] = $app->share(function () use ($app) {
             return new Silicone\Controller\ControllerResolver($app, $app['logger']);
         });
