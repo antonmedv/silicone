@@ -113,6 +113,9 @@ abstract class Application extends Silex\Application
         $app['security.access_rules'] = array(
             array('^/', 'IS_AUTHENTICATED_ANONYMOUSLY'),
         );
+        
+        $app['profiler.cache_dir'] = $app->getCacheDir() . '/profiler';
+        $app['profiler.mount_prefix'] = '/_profiler';
     }
 
     /**
@@ -151,6 +154,7 @@ abstract class Application extends Silex\Application
         $app->register(new Silex\Provider\RememberMeServiceProvider());
         $app->register(new Silicone\Provider\SecurityServiceProviderExtension());
         $app->register(new Silicone\Provider\RouterServiceProvider());
+        
         $app['console'] = $app->protect(function (\Symfony\Component\Console\Application $console) use ($app) {
             $console->add(new Silicone\Doctrine\Console\DatabaseCreateCommand($app));
             $console->add(new Silicone\Doctrine\Console\DatabaseDropCommand($app));
@@ -159,6 +163,13 @@ abstract class Application extends Silex\Application
             $console->add(new Silicone\Doctrine\Console\SchemaUpdateCommand($app));
             $console->add(new Silicone\Console\CacheClearCommand($app));
         });
+        
+        if ($app['debug']) {
+            $app->register(new Silex\Provider\WebProfilerServiceProvider(), array(
+                'profiler.cache_dir' => $app['profiler.cache_dir'],
+                'profiler.mount_prefix' => $app['profiler.mount_prefix'], 
+            ));
+        }
     }
 
     /**
