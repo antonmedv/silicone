@@ -170,6 +170,7 @@ abstract class Application extends Silex\Application
                 'profiler.cache_dir' => $app['profiler.cache_dir'],
                 'profiler.mount_prefix' => $app['profiler.mount_prefix'], 
             ));
+            $app->register(new Silicone\Provider\WebProfilerServiceProvider());
         }
     }
 
