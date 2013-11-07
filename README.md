@@ -1,4 +1,4 @@
 Silicone
 ========
 
-Silicone is organic edition of Silex Framework.
+Silicone is helpful extensions for Silex Framework.

@@ -18,11 +18,10 @@ class TwigServiceProviderExtension implements ServiceProviderInterface
     {
         $app['twig'] = $app->share($app->extend('twig', function(\Twig_Environment $twig, $app) {
             $twig->addExtension(new AssetsExtension($app));
-            $twig->addExtension(new ViewExtension());
             return $twig;
         }));
 
-        $app['twig.loader.filesystem'] = $app->share($app->extend('twig.loader.filesystem', function ($loader, $app) {
+        $app['twig.loader.filesystem'] = $app->share($app->extend('twig.loader.filesystem', function (\Twig_Loader_Filesystem $loader, $app) {
             $loader->addPath($app['silicone.templates_path'], 'Silicone');
 
             return $loader;

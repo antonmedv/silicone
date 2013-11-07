@@ -27,12 +27,6 @@ class ValidatorServiceProviderExtension implements ServiceProviderInterface
         $app['validator.validator_factory'] = $app->share(function () use ($app) {
             return new ConstraintValidatorFactory($app);
         });
-
-        if (isset($app['em'])) {
-            $app['validator.constraints.unique'] = function () use ($app) {
-                return new UniqueEntityValidator($app['em']);
-            };
-        }
     }
 
     public function boot(Application $app)
